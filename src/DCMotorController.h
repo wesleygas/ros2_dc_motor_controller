@@ -29,7 +29,7 @@ const int leftMotor_Channel = 2;
 
 //PhysicalConstants (these may be wise to put under a service)
 const float pulsesPerRev = 898.0;
-const float wheelDiameter = 0.068; //in milimiters
+const float wheelDiameter = 0.068; //in meters
 const float maxPulsesPerSecond = 3000;
 const float metersPerRev = M_PI*wheelDiameter;
 const float pulsesPerMeter = pulsesPerRev/metersPerRev;
@@ -52,7 +52,7 @@ PID leftMotorPID(&leftMotorPosition, &leftMotorOutput, &leftMotorTargetPosition,
 
 int64_t last_pos, cur_pos;
 unsigned long last_micros, cur_micro, last_print_mil;
-float targetSpeed = 0, filteredSpeed = 0;
+
 
 
 
@@ -105,7 +105,6 @@ void setupMotors(){
   
   last_pos = rightMotor_encoder.getCount();
   cur_pos = last_pos;
-  last_micros = micros();
 }
 
 void motorsLoop(){
