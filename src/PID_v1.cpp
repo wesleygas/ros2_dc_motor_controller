@@ -35,6 +35,11 @@ PID::PID(float* Input, float* Output, float* Setpoint,
     mySetpoint = Setpoint;
 		
 }
+
+void PID::ResetPID(){
+   ITerm = 0;
+   lastInput = *myInput;
+}
  
  
 /* Compute() **********************************************************************

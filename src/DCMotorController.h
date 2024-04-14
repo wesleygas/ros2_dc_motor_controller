@@ -35,9 +35,10 @@ const float metersPerRev = M_PI*wheelDiameter;
 const float pulsesPerMeter = pulsesPerRev/metersPerRev;
 const float metersPerPulse = metersPerRev/pulsesPerRev;
 const float maxSpeed = maxPulsesPerSecond*metersPerPulse; //metersPerSecond
+const float diffPulsePerRad = 105;
 
 //PID
-const int pidSampleTime = 1000; //microsseconds
+const int pidSampleTime = 1000; //microsseconds -> 1kHz
 float Kp = 40.0;
 float Kd = 0.0;
 float Ki = 10.0;
@@ -51,7 +52,7 @@ float leftMotorPosition, leftMotorOutput;
 PID leftMotorPID(&leftMotorPosition, &leftMotorOutput, &leftMotorTargetPosition, Kp, Ki, Kd, DIRECT);
 
 int64_t last_pos, cur_pos;
-unsigned long last_micros, cur_micro, last_print_mil;
+unsigned long last_micros, cur_micro;
 
 
 
@@ -105,6 +106,15 @@ void setupMotors(){
   
   last_pos = rightMotor_encoder.getCount();
   cur_pos = last_pos;
+}
+
+void resetPID(){
+  leftMotorTargetPosition = 0;
+  leftMotorPosition = 0;
+  leftMotorPID.ResetPID();
+  rightMotorTargetPosition = 0;
+  rightMotorPosition = 0;
+  rightMotorPID.ResetPID();
 }
 
 void motorsLoop(){

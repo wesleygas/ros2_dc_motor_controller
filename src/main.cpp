@@ -1,142 +1,39 @@
-#include <micro_ros_arduino.h>
-
+#include <Arduino.h>
 #include <stdio.h>
-
-#include <rcl/rcl.h>
-#include <rcl/error_handling.h>
-#include <rclc/rclc.h>
-#include <rclc/executor.h>
-
-#include <std_msgs/msg/int32.h>
-#include <std_msgs/msg/float32.h>
-#include <geometry_msgs/msg/twist.h>
-
 #include <math.h>
 #include "DCMotorController.h"
-
-#define WIFI_SSID ""
-#define WIFI_PWD  ""
+#include "commands.h"
 
 #define LED_PIN 2 
 
-rcl_subscription_t cmd_vel_subscriber;
-rcl_subscription_t accel_subscriber;
-rcl_publisher_t publisher;
-std_msgs__msg__Int32 msg;
-geometry_msgs__msg__Twist sub_msg;
-std_msgs__msg__Float32 accel_msg;
+#define SILENCE_TIMEOUT 2000
 
-rclc_executor_t executor;
-rclc_support_t support;
-rcl_allocator_t allocator;
-rcl_node_t node;
+// SKETCH STILL NEEDS CLEANUP
 
-float targetLinearVel = 0, targetAngularVel = 0, tgt_lm_speed = 0, tgt_rm_speed = 0;
+//motor control variables
+float tgt_lm_speed = 0, tgt_rm_speed = 0;
 float curr_lm_speed = 0, curr_rm_speed = 0; 
 float global_acceleration = 1.5*pulsesPerMeter; //m/s²
 
-#define RCCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){error_loop();}}
-#define RCSOFTCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){}}
-
-void error_loop(){
-  for (size_t i = 0; i < 100; i++)
-  {
-    //digitalWrite(LED_PIN, !digitalRead(LED_PIN));
-    delay(100);
-  }
-  ESP.restart();
-}
-
-void timer_callback(rcl_timer_t * timer, int64_t last_call_time)
-{
-  RCLC_UNUSED(last_call_time);
-  if (timer != NULL) {
-    RCSOFTCHECK(rcl_publish(&publisher, &msg, NULL));
-    msg.data++;
-  }
-}
-
-void twist_subscription_callback(const void * msgin)
+void accel_subscription_callback(float global_accel)
 {  
-  const geometry_msgs__msg__Twist * sub_msg = (const geometry_msgs__msg__Twist *)msgin;
-  targetAngularVel = sub_msg->angular.z;
-  targetAngularVel = targetAngularVel*105.0f;
-  targetLinearVel = (float)sub_msg->linear.x; //meters per second
-  targetLinearVel = (float)(targetLinearVel)*pulsesPerMeter; //pulses per second
-  tgt_rm_speed = constrain((-targetLinearVel + targetAngularVel), -maxPulsesPerSecond,maxPulsesPerSecond);
-  tgt_lm_speed = constrain((+targetLinearVel + targetAngularVel), -maxPulsesPerSecond,maxPulsesPerSecond);
-}
-
-void accel_subscription_callback(const void * msgin)
-{  
-  const std_msgs__msg__Float32 * accel_msg = (const std_msgs__msg__Float32 *)msgin;
+  // const std_msgs__msg__Float32 * accel_msg = (const std_msgs__msg__Float32 *)msgin;
   //Serial.printf("Received acceleration: %d\n", accel_msg->data);
-  global_acceleration = accel_msg->data*pulsesPerMeter;
+  global_acceleration = global_accel*pulsesPerMeter;
 }
-
-void setup_ros_sub(){
-  // create subscriber
-  RCCHECK(rclc_subscription_init_default(
-    &cmd_vel_subscriber,
-    &node,
-    ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist),
-    "cmd_vel"));
-
-  RCCHECK(rclc_subscription_init_default(
-    &accel_subscriber,
-    &node,
-    ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32),
-    "stepper_accel"));
-  
-  // create executor
-  RCCHECK(rclc_executor_init(&executor, &support.context, 2, &allocator));
-  RCCHECK(rclc_executor_add_subscription(&executor, &cmd_vel_subscriber, &sub_msg, &twist_subscription_callback, ON_NEW_DATA));
-  RCCHECK(rclc_executor_add_subscription(&executor, &accel_subscriber, &accel_msg, &accel_subscription_callback, ON_NEW_DATA));
-}
-
-void setup_ros_pub(){
-  //create publisher
-  RCCHECK(rclc_publisher_init_best_effort(
-    &publisher,
-    &node,
-    ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
-    "step_pos"));
-    msg.data = 0;
-}
-
-
 
 void setup(){
-  // Serial.begin(115200);
-  set_microros_transports();
+  Serial.begin(115200);
   setupMotors();
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, HIGH);
   delay(1000);
 
-  allocator = rcl_get_default_allocator();
-  // Initialize and modify options (Set DOMAIN ID to 30)
-  rcl_init_options_t init_options = rcl_get_zero_initialized_init_options();
-  RCCHECK(rcl_init_options_init(&init_options, allocator));
-  RCCHECK(rcl_init_options_set_domain_id(&init_options, 30));
-
-  RCCHECK(rclc_support_init_with_options(&support, 0, NULL, &init_options, &allocator));
-  
-  // create node
-  RCCHECK(rclc_node_init_default(&node, "stepper32", "", &support));
-  setup_ros_pub();
-  setup_ros_sub();
   rightMotorTargetPosition = (float)rightMotor_encoder.getCount();
   leftMotorTargetPosition = (float)leftMotor_encoder.getCount();
 }
 
-
-/*
- Linear to angular: 
-  RightMotorSpeed = -LeftMotorSpeed
-  rad/s to mm/s = rad/s*105mm
-*/
-
+// responsible for integrating the set velocity into the target position for each motor
 void speedLoop(){
   digitalWrite(LED_PIN, !digitalRead(LED_PIN));
   float dt = ((float) (cur_micro - last_micros))/1e6; //in seconds
@@ -156,15 +53,93 @@ void speedLoop(){
   last_micros = cur_micro;
 }
 
-void loop(){
-  RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(0)));
-  cur_micro = micros();
-  if(cur_micro - last_print_mil > 1e6){
-    RCSOFTCHECK(rcl_publish(&publisher, &msg, NULL));
-  //   Serial.printf("LeftMot: %.01f RightMot: %.01f TargetSpd: %.01f\n", leftMotorPosition, rightMotorPosition, leftMotorOutput);
-    last_print_mil= cur_micro;
+unsigned int lastMotorCommand = SILENCE_TIMEOUT;
+
+void runCommand(){
+  int i = 0;
+  char *str;
+  int pid_args[4];
+  arg1 = atoi(argv1);
+  arg2 = atoi(argv2);
+  switch(cmd) {
+    case PING:
+      Serial.printf("%ld %ld\n", arg1, arg2);
+      break;
+    case READ_ENCODERS:
+      Serial.printf("%d %d\n", (int)leftMotorPosition, (int)rightMotorPosition);
+      break;
+    case RESET_ENCODERS:
+      rightMotor_encoder.setCount(0);
+      leftMotor_encoder.setCount(0);
+      resetPID();
+      Serial.println("OK");
+      break;
+    case MOTOR_SPEEDS:
+      /* Reset the auto stop timer */
+      lastMotorCommand = millis();
+      tgt_lm_speed = (float)arg1;
+      tgt_rm_speed = (float)arg2;
+      Serial.println("OK"); 
+      break;
+    case MOTOR_ACCEL:
+      global_acceleration = (float)arg1;
+    default:
+    Serial.println("Not implemented");
+    break;
   }
-  if(last_micros-cur_micro > 1e3) speedLoop();
+}
+
+void parse_command(){
+  while(Serial.available()){
+    chr = Serial.read();
+    if (chr == 13) {
+      if (arg == 1) argv1[cmd_index] = '\0';
+      else if (arg == 2) argv2[cmd_index] = '\0';
+      runCommand();
+      resetCommand();
+    }
+    // Use spaces to delimit parts of the command
+    else if (chr == ' ') {
+      // Step through the arguments
+      if (arg == 0) arg = 1;
+      else if (arg == 1)  {
+        argv1[cmd_index] = '\0';
+        arg = 2;
+        cmd_index = 0;
+      }
+      continue;
+    }
+    else {
+      if (arg == 0) {
+        // The first arg is the single-letter command
+        cmd = chr;
+      }
+      else{
+        // avoid a segfault when parsing
+        if(cmd_index > MAX_CMND_LENGTH){
+          argv1[MAX_CMND_LENGTH] = '\0';
+          argv2[MAX_CMND_LENGTH] = '\0';
+        }else if (arg == 1) {
+          // Subsequent arguments can be more than one character
+          argv1[cmd_index] = chr;
+          cmd_index++;
+        }
+        else if (arg == 2) {
+          argv2[cmd_index] = chr;
+          cmd_index++;
+        }
+      } 
+    }
+  }
+}
+
+void loop(){
+  cur_micro = micros();
+  // if(cur_micro - last_print_mil > 1e6){
+  //   Serial.printf("LeftMot: %.01f RightMot: %.01f TargetSpd: %.01f\n", leftMotorPosition, rightMotorPosition, leftMotorOutput);
+    // last_print_mil= cur_micro;
+  // }
+  parse_command();
+  if(last_micros-cur_micro > pidSampleTime) speedLoop();
   motorsLoop();
-  
 }
