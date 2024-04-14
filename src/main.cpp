@@ -15,7 +15,7 @@
 #include "DCMotorController.h"
 
 #define WIFI_SSID ""
-#define WIFI_PWD  ""
+#define WIFI_PWD  "
 
 #define LED_PIN 2 
 
@@ -31,21 +31,26 @@ rclc_support_t support;
 rcl_allocator_t allocator;
 rcl_node_t node;
 
+enum states {
+  WAITING_AGENT,
+  AGENT_AVAILABLE,
+  AGENT_CONNECTED,
+  AGENT_DISCONNECTED
+} state;
+
 float targetLinearVel = 0, targetAngularVel = 0, tgt_lm_speed = 0, tgt_rm_speed = 0;
 float curr_lm_speed = 0, curr_rm_speed = 0; 
 float global_acceleration = 1.5*pulsesPerMeter; //m/s²
 
-#define RCCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){error_loop();}}
+#define RCCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){return false;}}
 #define RCSOFTCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){}}
+#define EXECUTE_EVERY_N_MS(MS, X)  do { \
+  static volatile int64_t init = -1; \
+  if (init == -1) { init = uxr_millis();} \
+  if (uxr_millis() - init > MS) { X; init = uxr_millis();} \
+} while (0)\
 
-void error_loop(){
-  for (size_t i = 0; i < 100; i++)
-  {
-    //digitalWrite(LED_PIN, !digitalRead(LED_PIN));
-    delay(100);
-  }
-  ESP.restart();
-}
+
 
 void timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 {
@@ -74,7 +79,7 @@ void accel_subscription_callback(const void * msgin)
   global_acceleration = accel_msg->data*pulsesPerMeter;
 }
 
-void setup_ros_sub(){
+bool setup_ros_sub(){
   // create subscriber
   RCCHECK(rclc_subscription_init_default(
     &cmd_vel_subscriber,
@@ -92,9 +97,10 @@ void setup_ros_sub(){
   RCCHECK(rclc_executor_init(&executor, &support.context, 2, &allocator));
   RCCHECK(rclc_executor_add_subscription(&executor, &cmd_vel_subscriber, &sub_msg, &twist_subscription_callback, ON_NEW_DATA));
   RCCHECK(rclc_executor_add_subscription(&executor, &accel_subscriber, &accel_msg, &accel_subscription_callback, ON_NEW_DATA));
+  return true;
 }
 
-void setup_ros_pub(){
+bool setup_ros_pub(){
   //create publisher
   RCCHECK(rclc_publisher_init_best_effort(
     &publisher,
@@ -102,18 +108,10 @@ void setup_ros_pub(){
     ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
     "step_pos"));
     msg.data = 0;
+  return true;
 }
 
-
-
-void setup(){
-  // Serial.begin(115200);
-  set_microros_transports();
-  setupMotors();
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, HIGH);
-  delay(1000);
-
+bool create_entities(){
   allocator = rcl_get_default_allocator();
   // Initialize and modify options (Set DOMAIN ID to 30)
   rcl_init_options_t init_options = rcl_get_zero_initialized_init_options();
@@ -124,8 +122,37 @@ void setup(){
   
   // create node
   RCCHECK(rclc_node_init_default(&node, "stepper32", "", &support));
-  setup_ros_pub();
-  setup_ros_sub();
+  if(!setup_ros_pub()) return false;
+  if(!setup_ros_sub()) return false;
+
+  return true;
+}
+
+void destroy_entities()
+{
+  rmw_context_t * rmw_context = rcl_context_get_rmw_context(&support.context);
+  (void) rmw_uros_set_context_entity_destroy_session_timeout(rmw_context, 0);
+
+  rcl_publisher_fini(&publisher, &node);
+  //rcl_timer_fini(&timer);
+  rclc_executor_fini(&executor);
+  rcl_node_fini(&node);
+  rclc_support_fini(&support);
+}
+
+
+
+void setup(){
+  //Serial.begin(115200);
+  //set_microros_wifi_transports(WIFI_SSID, WIFI_PWD, "192.168.0.87", 8888);
+  set_microros_transports();
+  setupMotors();
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, HIGH);
+  delay(1000);
+
+  //create_entities();
+  
   rightMotorTargetPosition = (float)rightMotor_encoder.getCount();
   leftMotorTargetPosition = (float)leftMotor_encoder.getCount();
 }
@@ -137,8 +164,17 @@ void setup(){
   rad/s to mm/s = rad/s*105mm
 */
 
+void resetSpeedLoop(){
+    tgt_rm_speed = 0;
+    curr_rm_speed = 0;
+    tgt_lm_speed = 0;
+    curr_rm_speed = 0;
+    rightMotorTargetPosition = rightMotorPosition;
+    leftMotorTargetPosition = leftMotorPosition;
+}
+
 void speedLoop(){
-  digitalWrite(LED_PIN, !digitalRead(LED_PIN));
+  // digitalWrite(LED_PIN, !digitalRead(LED_PIN));
   float dt = ((float) (cur_micro - last_micros))/1e6; //in seconds
   float max_accel = global_acceleration*dt;
   float lm_speed_diff = curr_lm_speed - tgt_lm_speed;
@@ -157,14 +193,48 @@ void speedLoop(){
 }
 
 void loop(){
-  RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(0)));
-  cur_micro = micros();
-  if(cur_micro - last_print_mil > 1e6){
-    RCSOFTCHECK(rcl_publish(&publisher, &msg, NULL));
-  //   Serial.printf("LeftMot: %.01f RightMot: %.01f TargetSpd: %.01f\n", leftMotorPosition, rightMotorPosition, leftMotorOutput);
-    last_print_mil= cur_micro;
+  // RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(0)));
+
+  switch (state) {
+    case WAITING_AGENT:
+      EXECUTE_EVERY_N_MS(500, state = (RMW_RET_OK == rmw_uros_ping_agent(100, 1)) ? AGENT_AVAILABLE : WAITING_AGENT;);
+      break;
+    case AGENT_AVAILABLE:
+      state = (true == create_entities()) ? AGENT_CONNECTED : WAITING_AGENT;
+      if (state == WAITING_AGENT) {
+        destroy_entities();
+      };
+      break;
+    case AGENT_CONNECTED:
+      EXECUTE_EVERY_N_MS(200, state = (RMW_RET_OK == rmw_uros_ping_agent(100, 1)) ? AGENT_CONNECTED : AGENT_DISCONNECTED;);
+      if (state == AGENT_CONNECTED) {
+        rclc_executor_spin_some(&executor, RCL_MS_TO_NS(100));
+      }
+      break;
+    case AGENT_DISCONNECTED:
+      destroy_entities();
+      state = WAITING_AGENT;
+      break;
+    default:
+      break;
   }
-  if(last_micros-cur_micro > 1e3) speedLoop();
-  motorsLoop();
+
+
+  cur_micro = micros();
+  // if(cur_micro - last_print_mil > 1e6){
+  //   RCSOFTCHECK(rcl_publish(&publisher, &msg, NULL));
+  // //   Serial.printf("LeftMot: %.01f RightMot: %.01f TargetSpd: %.01f\n", leftMotorPosition, rightMotorPosition, leftMotorOutput);
+  //   last_print_mil= cur_micro;
+  // }
+
+  if (state == AGENT_CONNECTED) {
+    if(last_micros-cur_micro > 1e3) speedLoop();
+    digitalWrite(LED_PIN, 1);
+    motorsLoop();
+  } else {
+    digitalWrite(LED_PIN, 0);
+    stopAllMotors();
+    resetSpeedLoop();
+  }
   
 }

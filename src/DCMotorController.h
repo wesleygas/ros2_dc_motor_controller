@@ -79,6 +79,11 @@ void setMotorOutput(int contollerOutput, int motorChannel, int motorDir){
   ledcWrite(motorChannel, abs(contollerOutput));
 }
 
+void stopAllMotors(){
+  setMotorOutput((int)0, rightMotor_Channel, rightMotor_Dir);
+  setMotorOutput((int)0, leftMotor_Channel, leftMotor_Dir);
+}
+
 void setupMotors(){
   //Right Motor Setup
   pinMode(rightMotor_Dir,OUTPUT);
