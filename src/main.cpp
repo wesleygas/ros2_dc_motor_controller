@@ -139,6 +139,10 @@ void loop(){
   //   Serial.printf("LeftMot: %.01f RightMot: %.01f TargetSpd: %.01f\n", leftMotorPosition, rightMotorPosition, leftMotorOutput);
     // last_print_mil= cur_micro;
   // }
+  if ((millis() - lastMotorCommand) > SILENCE_TIMEOUT) {;
+    tgt_lm_speed = 0;
+    tgt_rm_speed = 0;
+  }
   parse_command();
   if(last_micros-cur_micro > pidSampleTime) speedLoop();
   motorsLoop();
