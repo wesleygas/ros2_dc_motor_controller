@@ -4,7 +4,7 @@
 #include "DCMotorController.h"
 #include "commands.h"
 
-#define LED_PIN 2 
+// #define LED_PIN 8 Need to rewire to avoid pin 8
 
 #define SILENCE_TIMEOUT 2000
 
@@ -14,6 +14,8 @@
 float tgt_lm_speed = 0, tgt_rm_speed = 0;
 float curr_lm_speed = 0, curr_rm_speed = 0; 
 float global_acceleration = 1.5*pulsesPerMeter; //m/s²
+
+unsigned long last_print_mil = 0;
 
 void accel_subscription_callback(float global_accel)
 {  
@@ -25,9 +27,6 @@ void accel_subscription_callback(float global_accel)
 void setup(){
   Serial.begin(115200);
   setupMotors();
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, HIGH);
-  delay(1000);
 
   rightMotorTargetPosition = (float)rightMotor_encoder.getCount();
   leftMotorTargetPosition = (float)leftMotor_encoder.getCount();
@@ -35,7 +34,6 @@ void setup(){
 
 // responsible for integrating the set velocity into the target position for each motor
 void speedLoop(){
-  digitalWrite(LED_PIN, !digitalRead(LED_PIN));
   float dt = ((float) (cur_micro - last_micros))/1e6; //in seconds
   float max_accel = global_acceleration*dt;
   float lm_speed_diff = curr_lm_speed - tgt_lm_speed;
@@ -137,7 +135,7 @@ void loop(){
   cur_micro = micros();
   // if(cur_micro - last_print_mil > 1e6){
   //   Serial.printf("LeftMot: %.01f RightMot: %.01f TargetSpd: %.01f\n", leftMotorPosition, rightMotorPosition, leftMotorOutput);
-    // last_print_mil= cur_micro;
+  // last_print_mil= cur_micro;
   // }
   if ((millis() - lastMotorCommand) > SILENCE_TIMEOUT) {;
     tgt_lm_speed = 0;
