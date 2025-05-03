@@ -3,6 +3,7 @@
 #include <math.h>
 #include "DCMotorController.h"
 #include "commands.h"
+#include <driver/adc.h>
 
 // #define LED_PIN 8 Need to rewire to avoid pin 8
 
@@ -17,6 +18,39 @@ float global_acceleration = 1.5*pulsesPerMeter; //m/s²
 
 unsigned long last_print_mil = 0;
 
+// #define BATTERY_ADC_SAMPLES 16
+// #define BATTERY_ADC_MULTIPLIER 1.0
+// int battery_readings[BATTERY_ADC_SAMPLES];
+// float battery_voltage = 0;
+// char current_read_index = 0;
+// unsigned long last_battery_read_micro = 0;
+
+// void setup_battery_readings(){
+//   adc2_config_channel_atten(ADC2_CHANNEL_0, ADC_ATTEN_DB_12);
+//   int sum = 0;
+//   for(int i = BATTERY_ADC_SAMPLES-1; i >= 0; i--){
+//     adc2_get_raw((adc2_channel_t)0, (adc_bits_width_t)12, &battery_readings[i]);
+//     sum += battery_readings[i];
+//     delay(1);
+//   } 
+//   battery_voltage = (float)sum/(float)BATTERY_ADC_SAMPLES;
+//   battery_voltage = (battery_voltage/(2<<12))*2.5*1.0;
+// }
+
+// void sample_battery(){
+//   adc2_get_raw((adc2_channel_t)0, (adc_bits_width_t)12, &battery_readings[current_read_index]);
+//   current_read_index = (current_read_index+1)%BATTERY_ADC_SAMPLES;
+// }
+
+// void calculate_battery_voltage(){
+//   int sum = 0;
+//   for(int i = 0; i < BATTERY_ADC_SAMPLES; i++){
+//     sum += battery_readings[i];
+//   }
+//   battery_voltage = (float)sum/(float)BATTERY_ADC_SAMPLES;
+//   battery_voltage = (battery_voltage/(2<<12))*2.5*6.0;
+// }
+
 void accel_subscription_callback(float global_accel)
 {  
   // const std_msgs__msg__Float32 * accel_msg = (const std_msgs__msg__Float32 *)msgin;
@@ -27,7 +61,7 @@ void accel_subscription_callback(float global_accel)
 void setup(){
   Serial.begin(115200);
   setupMotors();
-
+  // setup_battery_readings();
   rightMotorTargetPosition = (float)rightMotor_encoder.getCount();
   leftMotorTargetPosition = (float)leftMotor_encoder.getCount();
 }
@@ -81,6 +115,11 @@ void runCommand(){
       break;
     case MOTOR_ACCEL:
       global_acceleration = (float)arg1;
+      break;
+    // case VOLTAGE_READ:
+    //   calculate_battery_voltage();
+    //   Serial.println(battery_voltage);
+    //   break;
     default:
     Serial.println("Not implemented");
     break;
@@ -144,4 +183,7 @@ void loop(){
   parse_command();
   if(last_micros-cur_micro > pidSampleTime) speedLoop();
   motorsLoop();
-}
+  // if (cur_micro - last_battery_read_micro > (uint)1e6) {
+  //   sample_battery();
+  //   last_battery_read_micro = cur_micro;
+  // }
