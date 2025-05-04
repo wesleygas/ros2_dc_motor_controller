@@ -8,16 +8,16 @@
 #define MOTOR_PWM_RESOLUTION_BITS 10
 
 
-const int leftMotor_SenseGreen = 7;
-const int leftMotor_SenseYellow = 2;
-const int leftMotor_A_out = 0;
-const int leftMotor_B_out = 1;
-SoftwareEncoder leftMotor_encoder(leftMotor_SenseGreen, leftMotor_SenseYellow);
+const int leftMotor_SenseYellow = 3;
+const int leftMotor_SenseGreen = 8;
+const int leftMotor_A_out = 10;
+const int leftMotor_B_out = 9;
+SoftwareEncoder leftMotor_encoder(leftMotor_SenseYellow, leftMotor_SenseGreen);
 
-const int rightMotor_SenseGreen = 8;
-const int rightMotor_SenseYellow = 3;
-const int rightMotor_A_out = 10;
-const int rightMotor_B_out = 9;
+const int rightMotor_SenseYellow = 2;
+const int rightMotor_SenseGreen = 7;
+const int rightMotor_A_out = 0;
+const int rightMotor_B_out = 1;
 SoftwareEncoder rightMotor_encoder(rightMotor_SenseGreen, rightMotor_SenseYellow);
 
 // Motor constants 
@@ -74,19 +74,19 @@ void setup_ledc_channel(uint8_t pin, uint8_t chan, uint8_t inverted){
 
 void setMotorOutput(int contollerOutput, int motorChannel){
   if(contollerOutput > 0){
-    ledcWrite(motorChannel, abs(contollerOutput));
-    ledcWrite(motorChannel+1, 0);
-  } else {
     ledcWrite(motorChannel, 0);
     ledcWrite(motorChannel+1, abs(contollerOutput));
+  } else {
+    ledcWrite(motorChannel, abs(contollerOutput));
+    ledcWrite(motorChannel+1, 0);
   }
 }
 
 void setupMotors(){
   //Right Motor Setup
   ledcSetup(rightMotor_Channel, MOTOR_PWM_FREQUENCY, MOTOR_PWM_RESOLUTION_BITS);
-  setup_ledc_channel(rightMotor_A_out, rightMotor_Channel, 0);
-  setup_ledc_channel(rightMotor_B_out, rightMotor_Channel + 1, 0);
+  setup_ledc_channel(rightMotor_A_out, rightMotor_Channel + 1, 0);
+  setup_ledc_channel(rightMotor_B_out, rightMotor_Channel, 0);
   rightMotor_encoder.setCount(0);
   rightMotorPID.SetMode(AUTOMATIC);
   rightMotorPID.SetSampleTime(pidSampleTime);
