@@ -8,7 +8,7 @@
 #define MOTOR_PWM_RESOLUTION_BITS 10
 
 
-const int leftMotor_SenseYellow = 3;
+const int leftMotor_SenseYellow = 5;
 const int leftMotor_SenseGreen = 8;
 const int leftMotor_A_out = 10;
 const int leftMotor_B_out = 9;
@@ -25,7 +25,7 @@ const int rightMotor_Channel = 0;
 const int leftMotor_Channel = 2; // the channel 1 cannot be used because it shares the timer with right motor channel
 
 //PhysicalConstants (these may be wise to put under a service)
-const float pulsesPerRev = 898.0;
+const float pulsesPerRev = 1975.0;
 const float wheelDiameter = 0.068; //in meters
 const float maxPulsesPerSecond = 3000;
 const float metersPerRev = M_PI*wheelDiameter;
