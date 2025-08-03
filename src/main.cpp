@@ -12,9 +12,10 @@
 // SKETCH STILL NEEDS CLEANUP
 
 //motor control variables
+//tgt_speeds are set in pulses per second
 float tgt_lm_speed = 0, tgt_rm_speed = 0;
 float curr_lm_speed = 0, curr_rm_speed = 0; 
-float global_acceleration = 1.5*pulsesPerMeter; //m/s²
+float global_acceleration = 9000; //pulses/second^2
 
 unsigned long last_print_mil = 0;
 
@@ -51,15 +52,8 @@ void calculate_battery_voltage(){
   battery_voltage = (battery_voltage/(2<<11))*2.5*7.0;
 }
 
-void accel_subscription_callback(float global_accel)
-{  
-  // const std_msgs__msg__Float32 * accel_msg = (const std_msgs__msg__Float32 *)msgin;
-  //Serial.printf("Received acceleration: %d\n", accel_msg->data);
-  global_acceleration = global_accel*pulsesPerMeter;
-}
-
 void setup(){
-  Serial.begin(115200);
+  Serial.begin(230400);
   setupMotors();
   setup_battery_readings();
   rightMotorTargetPosition = (float)rightMotor_encoder.getCount();
@@ -90,7 +84,6 @@ unsigned int lastMotorCommand = SILENCE_TIMEOUT;
 void runCommand(){
   int i = 0;
   char *str;
-  int pid_args[4];
   arg1 = atoi(argv1);
   arg2 = atoi(argv2);
   switch(cmd) {

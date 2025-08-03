@@ -24,16 +24,6 @@ SoftwareEncoder rightMotor_encoder(rightMotor_SenseGreen, rightMotor_SenseYellow
 const int rightMotor_Channel = 0;
 const int leftMotor_Channel = 2; // the channel 1 cannot be used because it shares the timer with right motor channel
 
-//PhysicalConstants (these may be wise to put under a service)
-const float pulsesPerRev = 1975.0;
-const float wheelDiameter = 0.068; //in meters
-const float maxPulsesPerSecond = 3000;
-const float metersPerRev = M_PI*wheelDiameter;
-const float pulsesPerMeter = pulsesPerRev/metersPerRev;
-const float metersPerPulse = metersPerRev/pulsesPerRev;
-const float maxSpeed = maxPulsesPerSecond*metersPerPulse; //metersPerSecond
-const float diffPulsePerRad = 105;
-
 //PID
 const int pidSampleTime = 1000; //microsseconds -> 1kHz
 float Kp = 40.0;
